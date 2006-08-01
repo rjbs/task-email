@@ -1,0 +1,8 @@
+---
+name: Task::Email::PEP::All
+abstract: every Perl Email Project distribution, for testing
+description: |
+  This is a L<Task>-style bundle of the latest version of every PEP-maintaned
+  module, as of the time of bundle-construction.
+see_also: |
+  http://emailproject.perl.org/wiki/Category:PEP-Maintained

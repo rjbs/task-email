@@ -1,0 +1,262 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+
+use Cwd ();
+use File::Find::Rule;
+use File::Path ();
+use File::Temp ();
+use Text::Table;
+use Text::Template;
+use YAML::Syck ();
+
+my %file;
+my $cwd = Cwd::getcwd;
+
+my @trunks =
+  map { File::Spec->rel2abs($_) }
+  File::Find::Rule->directory->name('trunk')->in('..');
+
+my @core_skip = qw(Bundle Task Email-Applications);
+
+die "usage: megabundle <bundle.yml> ..." unless @ARGV;
+
+for my $file (@ARGV) {
+  chdir $cwd or die "can't chdir to original working directory $cwd: $!";
+  my @modules;
+
+  my $bundle = YAML::Syck::LoadFile($file);
+
+  (my $dist_name = $bundle->{name}) =~ s/::/-/g;
+  (my $leaf_file = $bundle->{name}) =~ s/.+:://g;
+  $leaf_file .= '.pm';
+
+  for my $trunk (grep { /[A-Z]/ } @trunks) {
+    for (@core_skip, @{ $bundle->{skip} }) {
+      next if $trunk =~ /\Q$_\E/;
+    }
+
+    chdir $trunk or die "couldn't chdir to $trunk: $!";
+
+    my $version_from;
+    if (open my $makefile, '<', 'Makefile.PL') {
+      while (defined (my $line = <$makefile>)) {
+        chomp $line;
+        $version_from = $line if $line =~ /(version|all)_from/i;
+      }
+    } else {
+      warn "Couldn't read $trunk/Makefile.PL: $!";
+      next;
+    }
+
+    unless ($version_from) {
+      warn "Couldn't find version_from for $trunk\n";
+      next;
+    }
+
+    my ($filename) = $version_from =~ m{([/\w]+.pm)};
+
+    open my $fh, '<', $filename or die "couldn't read $filename: $!";
+
+    my $version_line;
+    my $abstract_line;
+
+    my $module_name_fragment = $filename;
+       $module_name_fragment =~ s(^lib[\\/])()g;
+       $module_name_fragment =~ s([\\/])(::)g;
+       $module_name_fragment =~ s(.pm)()g;
+
+    while (defined (my $line = <$fh>)) {
+      chomp $line;
+
+      if ($line =~ /^([\w:]+::)?\Q$module_name_fragment\E\s+-/) {
+        warn "two matching abstract lines in $filename" if $abstract_line;
+        $abstract_line = $line;
+      }
+      if ($line =~ /^\s*(our\s+)?\$(([\w:]+::)?\Q$module_name_fragment\E::)?VERSION\s*=\s*[^\s\$]/) {
+        warn "two matching version lines in $filename" if $version_line;
+        $version_line = $line;
+      }
+    }
+
+    unless ($abstract_line) {
+      warn "Couldn't get abstract for $trunk\n";
+      next;
+    }
+    unless ($version_line) {
+      warn "Couldn't get version for $trunk\n";
+      next;
+    }
+
+    my ($module, $abstract) = split /\s*-\s*/, $abstract_line, 2;
+    my (undef, $version) = $version_line =~ /=\s*(['"]?)(.+)\1;/;
+
+    if (index($version, '_') >= 0) {
+      warn "Skipping development version ($version) of $module\n";
+      next;
+    }
+    
+    push @modules, {
+      name     => $module,
+      abstract => $abstract,
+      version  => $version,
+    };
+  }
+
+  my $table = Text::Table->new;
+  for my $module (sort { $a->{name} cmp $b->{name} } @modules) {
+    $table->add($module->{name}, $module->{version}, '-', $module->{abstract});
+  }
+
+  my @time = gmtime;
+  my $year = 1900 + $time[5];
+  my $version = sprintf "%u%03u.%02u%1u",
+    ($time[5]-100), $time[7], $time[2], ($time[1]/10);
+
+  (my $spaced_table = $table) =~ s/\n(?!\z)/\n\n/g;
+
+  my $module_template = <<'END_TEMPLATE';
+package {$module};
+use strict;
+use warnings;
+
+=head1 NAME
+
+{$module} - {$abstract}
+
+=head1 SYNOPSIS
+
+  $ cpanp install {$module}
+
+=head1 DESCRIPTION
+
+{$description}
+=head1 VERSION
+
+version {$version}
+
+=cut
+
+our $VERSION = '{$version}';
+
+=head2 CONTENTS
+
+{$table}=head2 PERL EMAIL PROJECT
+
+This bundle is maintained by the Perl Email Project.
+
+  http://emailproject.perl.org/wiki/{$module}
+
+=head2 SEE ALSO
+
+{$see_also}
+=head2 COPYRIGHT
+
+This code is copyright (C) 2006, Ricardo SIGNES.  It is released under the same
+terms as perl itself.  No claims are made, here, as to the copyrights of the
+software pointed to by this bundle.
+
+=cut
+
+1;
+END_TEMPLATE
+
+  $file{$leaf_file} = Text::Template->fill_this_in(
+    $module_template,
+    HASH => {
+      dist     => $dist_name,
+      module   => $bundle->{name},
+      abstract => $bundle->{abstract},
+      see_also => $bundle->{see_also},
+      version  => $version,
+      table    => $spaced_table,
+      year     => $year, # use in (c) later
+      description => $bundle->{description},
+      leaf_file   => $leaf_file,
+    },
+  );
+
+  my $makefile_template = <<'END_TEMPLATE';
+use inc::Module::Install;
+
+name         ( '{$dist}'                    );
+author       ( 'Ricardo SIGNES <rjbs@cpan.org>' );
+version_from ( '{$leaf_file}'               );
+license      ( 'perl'                       );
+auto_install;
+
+{
+  for my $module (sort { $a->{name} cmp $b->{name} } @modules) {
+    $OUT .= "requires('$module->{name}' => '$module->{version}');\n";
+  }
+}
+
+&WriteAll;
+END_TEMPLATE
+
+  $file{'Makefile.PL'} = Text::Template->fill_this_in(
+    $makefile_template,
+    HASH => {
+      dist    => $dist_name,
+      module  => $bundle->{name},
+      table   => $spaced_table,
+      version => $version,
+      modules => \@modules,
+      year    => $year, # use in (c) later
+      leaf_file   => $leaf_file,
+    },
+  );
+
+
+  $file{'t/pod.t'} = <<'END_TEST';
+#!perl -T
+
+use Test::More;
+eval "use Test::Pod 1.14";
+plan skip_all => "Test::Pod 1.14 required for testing POD" if $@;
+all_pod_files_ok();
+END_TEST
+
+  $file{README} = <<'END_TEST';
+This is a Task distribution.  See http://search.cpan.org/dist/Task
+
+This distribution will require all distributions maintained by the Perl Email
+Project.  http://emailproject.perl.org/
+
+Installing this properly without using CPAN.pm or CPANPLUS will be a pain.  You
+can run:
+
+  perl Makefile.PL
+  make # or your make tool of choice
+
+This will list missing dependencies.  It will not install them.
+END_TEST
+
+  $file{Changes}
+    = "This bundle is automatically generated and no changelog is maintained.\n";
+
+  my $tempdir = File::Temp::tempdir(CLEANUP => 1);
+  chdir $tempdir or die "couldn't chdir to $tempdir: $!";
+
+  for my $file (keys %file) {
+    if ((my $path = $file) =~ s{/[^/]+$}{}g) {
+      File::Path::mkpath $path, 0, 0755 if $path and not -d $path;
+    }
+
+    open my $fh, '>', $file or die "couldn't open $file for writing: $!";
+    print $fh $file{$file} or die "couldn't write to $file: $!";
+    close $fh or die "error closing $file: $!";
+  }
+
+  my @todo = (
+    '/usr/bin/perl Makefile.PL',
+    'make manifest',
+    'make test',
+    'make dist',
+    "cp Task*.gz $cwd",
+  );
+
+  for my $todo (@todo) {
+    die "error executing $todo" if system $todo;
+  }
+}
