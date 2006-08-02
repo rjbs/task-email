@@ -141,7 +141,9 @@ our $VERSION = '{$version}';
 
 =head2 CONTENTS
 
-{$table}=head2 PERL EMAIL PROJECT
+{$table}
+
+=head2 PERL EMAIL PROJECT
 
 This bundle is maintained by the Perl Email Project.
 
