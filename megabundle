@@ -31,9 +31,10 @@ for my $file (@ARGV) {
   (my $leaf_file = $bundle->{name}) =~ s/.+:://g;
   $leaf_file .= '.pm';
 
-  for my $trunk (grep { /[A-Z]/ } @trunks) {
+  TRUNK: for my $trunk (grep { /[A-Z]/ } @trunks) {
     for (@core_skip, @{ $bundle->{skip} }) {
-      next if $trunk =~ /\Q$_\E/;
+      my $regex = qr/\Q$_\E/;
+      next TRUNK if $trunk =~ /\Q$_\E/;
     }
 
     chdir $trunk or die "couldn't chdir to $trunk: $!";
