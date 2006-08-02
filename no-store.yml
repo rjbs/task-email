@@ -7,6 +7,6 @@ description: |
   Email::Store or its plugins, as those drastically increase the prerequisite
   chain.
 see_also: |
-  http://emailproject.perl.org/wiki/Category:PEP-Maintained
+  http://emailproject.perl.org/
 skip:
   - Email-Store
