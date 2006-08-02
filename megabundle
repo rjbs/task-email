@@ -10,7 +10,6 @@ use Text::Table;
 use Text::Template;
 use YAML::Syck ();
 
-my %file;
 my $cwd = Cwd::getcwd;
 
 my @trunks =
@@ -33,7 +32,6 @@ for my $file (@ARGV) {
 
   TRUNK: for my $trunk (grep { /[A-Z]/ } @trunks) {
     for (@core_skip, @{ $bundle->{skip} }) {
-      my $regex = qr/\Q$_\E/;
       next TRUNK if $trunk =~ /\Q$_\E/;
     }
 
@@ -108,6 +106,8 @@ for my $file (@ARGV) {
   for my $module (sort { $a->{name} cmp $b->{name} } @modules) {
     $table->add($module->{name}, $module->{version}, '-', $module->{abstract});
   }
+
+  my %file;
 
   my @time = gmtime;
   my $year = 1900 + $time[5];

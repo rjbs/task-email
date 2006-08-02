@@ -8,3 +8,5 @@ description: |
   chain.
 see_also: |
   http://emailproject.perl.org/wiki/Category:PEP-Maintained
+skip:
+  - Email-Store
