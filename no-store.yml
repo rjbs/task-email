@@ -10,3 +10,4 @@ see_also: |
   http://emailproject.perl.org/
 skip:
   - Email-Store
+  - Mail-Audit-Razor
