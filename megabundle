@@ -186,7 +186,6 @@ name         ( '{$dist}'                    );
 author       ( 'Ricardo SIGNES <rjbs@cpan.org>' );
 version_from ( '{$leaf_file}'               );
 license      ( 'perl'                       );
-auto_install;
 
 {
   for my $module (sort { $a->{name} cmp $b->{name} } @modules) {
@@ -215,6 +214,7 @@ END_TEMPLATE
 #!perl -T
 
 use Test::More;
+plan skip_all => "set RELEASE_TESTING to set" unless $ENV{RELEASE_TESTING};
 eval "use Test::Pod 1.14";
 plan skip_all => "Test::Pod 1.14 required for testing POD" if $@;
 all_pod_files_ok();
@@ -224,6 +224,7 @@ END_TEST
 #!perl -T
 
 use Test::More;
+plan skip_all => "set RELEASE_TESTING to set" unless $ENV{RELEASE_TESTING};
 eval "use Test::Pod::Coverage 1.08";
 plan skip_all => "Test::Pod::Coverage 1.08 required for testing POD coverage"
   if $@;
