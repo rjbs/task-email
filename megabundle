@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/bin/env perl
 use strict;
 use warnings;
 
@@ -8,7 +8,7 @@ use File::Path ();
 use File::Temp ();
 use Text::Table;
 use Text::Template;
-use YAML::Syck ();
+use YAML::XS ();
 
 my $cwd = Cwd::getcwd;
 
@@ -24,7 +24,7 @@ for my $file (@ARGV) {
   chdir $cwd or die "can't chdir to original working directory $cwd: $!";
   my @modules;
 
-  my $bundle = YAML::Syck::LoadFile($file);
+  my $bundle = YAML::XS::LoadFile($file);
 
   (my $dist_name = $bundle->{name}) =~ s/::/-/g;
   (my $leaf_file = $bundle->{name}) =~ s/.+:://g;
@@ -264,7 +264,7 @@ END_TEST
   }
 
   my @todo = (
-    '/usr/bin/perl Makefile.PL',
+    'perl Makefile.PL',
     'make manifest',
     'make test',
     'make dist',
